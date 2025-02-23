@@ -1,0 +1,82 @@
+/* Global Styles using Poppins font and our color palette */
+body {
+  margin: 0;
+  padding: 0;
+  font-family: 'Poppins', sans-serif;
+  background-color: #FCFFEE;
+  color: #1B1F13;
+}
+
+:root {
+  --primary-green: #CAEF7D;
+  --black: #1B1F13;
+  --white: #FCFFEE;
+}
+
+/* Header styling */
+.header {
+  background-color: var(--primary-green);
+  padding: 1rem;
+  text-align: center;
+}
+
+/* Footer styling */
+.footer {
+  background-color: var(--black);
+  color: var(--white);
+  text-align: center;
+  padding: 1rem;
+}
+
+/* Global button styles */
+button,
+a.cta {
+  background-color: var(--primary-green);
+  border: none;
+  color: var(--black);
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+button:hover,
+a.cta:hover {
+  opacity: 0.9;
+}
+
+/* Dashboard grid layout */
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1rem;
+  padding: 1rem;
+}
+
+/* Calculator card styling */
+.calculator-card {
+  background-color: var(--white);
+  border: 1px solid var(--primary-green);
+  border-radius: 8px;
+  padding: 1rem;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.calculator-card h2 {
+  font-size: 1.2rem;
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+}
+
+.calculator-card p {
+  font-size: 1rem;
+  margin-bottom: 1rem;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+}

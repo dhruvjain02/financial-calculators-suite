@@ -1,0 +1,22 @@
+{
+    "name": "website-dashboard-2.0",
+    "version": "1.0.0",
+    "private": true,
+    "scripts": {
+        "dev": "next dev",
+        "build": "next build",
+        "start": "next start",
+        "lint": "next lint"
+    },
+    "dependencies": {
+        "next": "^15.1.7",
+        "react": "18.2.0",
+        "react-dom": "18.2.0",
+        "recharts": "^2.15.1"
+    },
+    "devDependencies": {
+        "@types/node": "18.15.11",
+        "@types/react": "18.0.28",
+        "typescript": "5.0.4"
+    }
+}
