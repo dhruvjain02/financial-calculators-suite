@@ -18,12 +18,15 @@ import {
 // Interfaces
 // -----------------------
 interface CalculatorInputs {
-  fdCorpus: string;           // FD Corpus (INR)
-  annualWithdrawal: string;   // Annual Withdrawal (INR)
-  fdInterestRate: string;     // FD Interest Rate (% p.a.)
-  inflationRate: string;      // Inflation Rate (% p.a.)
-  taxRate?: string;           // Optional: Tax Rate on Interest (% p.a.)
-  lifestyleAdjustment?: string; // Optional: Annual adjustment for lifestyle changes (% p.a.)
+  fdCorpus: string;             // FD Corpus (INR)
+  annualWithdrawal: string;     // Annual Withdrawal (INR)
+  fdInterestRate: string;       // FD Interest Rate (% p.a.)
+  inflationRate: string;        // Inflation Rate (% p.a.)
+  taxRate?: string;             // Optional: Tax Rate on Interest (% p.a.)
+  lifestyleAdjustment?: string; // Optional: Annual lifestyle adjustment (% p.a.)
+  currentAge: string;           // Current Age
+  retirementAge: string;        // Retirement Age
+  lifeExpectancy: string;       // Life Expectancy
 }
 
 interface YearlyData {
@@ -198,6 +201,9 @@ const FDBasedRetirementCalculator: React.FC = () => {
     inflationRate: "",
     taxRate: "",
     lifestyleAdjustment: "",
+    currentAge: "",
+    retirementAge: "",
+    lifeExpectancy: "",
   });
   const [errors, setErrors] = useState<Partial<CalculatorInputs>>({});
   const [results, setResults] = useState<Results | null>(null);
@@ -213,13 +219,23 @@ const FDBasedRetirementCalculator: React.FC = () => {
   // Validate inputs
   const validateInputs = (): boolean => {
     const newErrors: Partial<CalculatorInputs> = {};
-    const requiredFields = ["fdCorpus", "annualWithdrawal", "fdInterestRate", "inflationRate"];
+    // Basic numeric validations for core fields
+    const requiredFields = [
+      "fdCorpus",
+      "annualWithdrawal",
+      "fdInterestRate",
+      "inflationRate",
+      "currentAge",
+      "retirementAge",
+      "lifeExpectancy",
+    ];
     requiredFields.forEach((field) => {
       const value = inputs[field as keyof CalculatorInputs];
       if (!value || isNaN(Number(value)) || Number(value) < 0) {
         newErrors[field as keyof CalculatorInputs] = "Please enter a valid number";
       }
     });
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -229,12 +245,20 @@ const FDBasedRetirementCalculator: React.FC = () => {
     if (!validateInputs()) return;
     setIsCalculating(true);
 
+    // Convert all needed inputs
     const FD = parseFloat(inputs.fdCorpus);
     const withdrawalBase = parseFloat(inputs.annualWithdrawal);
     const r = parseFloat(inputs.fdInterestRate) / 100;
     const inflation = parseFloat(inputs.inflationRate) / 100;
     const taxRate = inputs.taxRate ? parseFloat(inputs.taxRate) / 100 : 0;
-    const lifestyle = inputs.lifestyleAdjustment ? parseFloat(inputs.lifestyleAdjustment) / 100 : 0;
+    const lifestyle = inputs.lifestyleAdjustment
+      ? parseFloat(inputs.lifestyleAdjustment) / 100
+      : 0;
+    const currentAge = parseFloat(inputs.currentAge);
+    const retirementAge = parseFloat(inputs.retirementAge);
+    const lifeExp = parseFloat(inputs.lifeExpectancy);
+    // Maximum simulation years = life expectancy - retirement age
+    const maxYears = lifeExp - retirementAge;
 
     let year = 0;
     let corpus = FD;
@@ -242,16 +266,24 @@ const FDBasedRetirementCalculator: React.FC = () => {
     let totalInterestEarned = 0;
     const yearWise: YearlyData[] = [];
 
-    while (corpus > 0 && year < 100) {
+    // Simulate until the corpus depletes or we reach the maximum number of years
+    while (corpus > 0 && year < maxYears) {
       year++;
       const startingCorpus = corpus;
       const interestEarned = startingCorpus * r;
-      const taxPaid = taxRate ? interestEarned * taxRate : 0;
+      const taxPaid = interestEarned * taxRate;
       const netInterest = interestEarned - taxPaid;
       totalInterestEarned += netInterest;
-      const withdrawal = withdrawalBase * Math.pow(1 + inflation, year - 1) * Math.pow(1 + lifestyle, year - 1);
+
+      // Adjust annual withdrawal for inflation and lifestyle changes
+      const withdrawal =
+        withdrawalBase *
+        Math.pow(1 + inflation, year - 1) *
+        Math.pow(1 + lifestyle, year - 1);
+
       totalWithdrawals += withdrawal;
       corpus = startingCorpus + netInterest - withdrawal;
+
       yearWise.push({
         year,
         startingCorpus: parseFloat(startingCorpus.toFixed(2)),
@@ -261,6 +293,7 @@ const FDBasedRetirementCalculator: React.FC = () => {
         withdrawal: parseFloat(withdrawal.toFixed(2)),
         endingCorpus: parseFloat(corpus.toFixed(2)),
       });
+
       if (corpus <= 0) break;
     }
 
@@ -274,29 +307,48 @@ const FDBasedRetirementCalculator: React.FC = () => {
     setTimeout(() => setIsCalculating(false), 1000);
   };
 
-  // Prepare chart data for line and bar charts (showing remaining corpus over time)
+  // Parse retirement age once for use in chart mapping and table
+  const retirementAgeNum = parseFloat(inputs.retirementAge);
+
+  // Prepare chart data for line and bar charts
+  // The x-axis now shows the actual age (retirementAge + year - 1)
   const lineChartData =
     results &&
     results.yearWise.map((data) => ({
-      year: data.year,
+      age: retirementAgeNum + data.year - 1,
       "Remaining Corpus": data.endingCorpus,
     }));
 
   const barChartData =
     results &&
     results.yearWise.map((data) => ({
-      year: data.year,
+      age: retirementAgeNum + data.year - 1,
       Withdrawal: data.withdrawal,
       "Net Interest": data.netInterest,
     }));
 
-  // Recommendation based on final corpus balance
-  const recommendation =
-    results && results.finalCorpus > 0
-      ? "Your FD corpus appears sustainable for the projected period."
-      : results
-      ? `Your FD corpus is projected to deplete after ${results.yearsSustained} years. Consider reducing your annual withdrawal or increasing your corpus.`
-      : "";
+  // Construct final recommendation based on new inputs
+  let recommendation = "";
+  if (results) {
+    const { yearsSustained, finalCorpus } = results;
+    const depletionAge = retirementAgeNum + yearsSustained;
+    if (finalCorpus > 0) {
+      recommendation = `Your FD corpus appears sustainable for ${yearsSustained} year(s) after retirement (i.e., until about age ${depletionAge}).`;
+    } else {
+      recommendation = `Your FD corpus is projected to deplete after ${yearsSustained} year(s) in retirement (i.e., around age ${depletionAge}). Consider adjusting your withdrawals or increasing your corpus.`;
+    }
+    if (depletionAge < parseFloat(inputs.lifeExpectancy)) {
+      recommendation += ` However, your life expectancy is ${inputs.lifeExpectancy}, so you may face a shortfall.`;
+    } else {
+      recommendation += ` This meets or exceeds your life expectancy of ${inputs.lifeExpectancy}.`;
+    }
+    if (parseFloat(inputs.currentAge) < retirementAgeNum) {
+      const yearsUntilRetire = retirementAgeNum - parseFloat(inputs.currentAge);
+      recommendation += ` You are currently ${inputs.currentAge} and plan to retire at ${retirementAgeNum} (in ${yearsUntilRetire} year(s)).`;
+    } else {
+      recommendation += ` You are already at or past your planned retirement age (${retirementAgeNum}).`;
+    }
+  }
 
   return (
     <div className="container">
@@ -315,6 +367,52 @@ const FDBasedRetirementCalculator: React.FC = () => {
       <div className="form-container">
         <h2 className="section-title">Retirement Investment Details</h2>
         <div className="input-group">
+          {/* Current Age */}
+          <label>
+            <span className="input-label">
+              Current Age
+              <TooltipIcon text="Enter your current age in years." />
+            </span>
+            <input
+              type="number"
+              name="currentAge"
+              value={inputs.currentAge}
+              onChange={handleInputChange}
+              placeholder="e.g., 30"
+            />
+            {errors.currentAge && <span className="error">{errors.currentAge}</span>}
+          </label>
+          {/* Retirement Age */}
+          <label>
+            <span className="input-label">
+              Retirement Age
+              <TooltipIcon text="Enter the age at which you plan to retire and start using your FD corpus." />
+            </span>
+            <input
+              type="number"
+              name="retirementAge"
+              value={inputs.retirementAge}
+              onChange={handleInputChange}
+              placeholder="e.g., 60"
+            />
+            {errors.retirementAge && <span className="error">{errors.retirementAge}</span>}
+          </label>
+          {/* Life Expectancy */}
+          <label>
+            <span className="input-label">
+              Life Expectancy
+              <TooltipIcon text="Enter your estimated life expectancy in years." />
+            </span>
+            <input
+              type="number"
+              name="lifeExpectancy"
+              value={inputs.lifeExpectancy}
+              onChange={handleInputChange}
+              placeholder="e.g., 85"
+            />
+            {errors.lifeExpectancy && <span className="error">{errors.lifeExpectancy}</span>}
+          </label>
+          {/* FD Corpus */}
           <label>
             <span className="input-label">
               FD Corpus (INR)
@@ -332,6 +430,7 @@ const FDBasedRetirementCalculator: React.FC = () => {
             </span>
             {errors.fdCorpus && <span className="error">{errors.fdCorpus}</span>}
           </label>
+          {/* Annual Withdrawal */}
           <label>
             <span className="input-label">
               Annual Withdrawal (INR)
@@ -349,6 +448,7 @@ const FDBasedRetirementCalculator: React.FC = () => {
             </span>
             {errors.annualWithdrawal && <span className="error">{errors.annualWithdrawal}</span>}
           </label>
+          {/* FD Interest Rate */}
           <label>
             <span className="input-label">
               FD Interest Rate (% p.a.)
@@ -366,6 +466,7 @@ const FDBasedRetirementCalculator: React.FC = () => {
             </span>
             {errors.fdInterestRate && <span className="error">{errors.fdInterestRate}</span>}
           </label>
+          {/* Inflation Rate */}
           <label>
             <span className="input-label">
               Inflation Rate (% p.a.)
@@ -383,6 +484,7 @@ const FDBasedRetirementCalculator: React.FC = () => {
             </span>
             {errors.inflationRate && <span className="error">{errors.inflationRate}</span>}
           </label>
+          {/* Tax Rate */}
           <label>
             <span className="input-label">
               Tax Rate on Interest (% p.a.) (Optional)
@@ -399,6 +501,7 @@ const FDBasedRetirementCalculator: React.FC = () => {
               {inputs.taxRate && numberToWordsPercent(parseFloat(inputs.taxRate))}
             </span>
           </label>
+          {/* Lifestyle Adjustment */}
           <label>
             <span className="input-label">
               Lifestyle Adjustment (% p.a.) (Optional)
@@ -412,7 +515,8 @@ const FDBasedRetirementCalculator: React.FC = () => {
               placeholder="e.g., 2"
             />
             <span className="converter">
-              {inputs.lifestyleAdjustment && numberToWordsPercent(parseFloat(inputs.lifestyleAdjustment))}
+              {inputs.lifestyleAdjustment &&
+                numberToWordsPercent(parseFloat(inputs.lifestyleAdjustment))}
             </span>
           </label>
         </div>
@@ -445,7 +549,9 @@ const FDBasedRetirementCalculator: React.FC = () => {
               {numberToWords(Math.round(results.finalCorpus))} Rupees)
             </div>
             <div className="summary-item">
-              <strong>Recommendation:</strong> {recommendation}
+              <strong>Recommendation:</strong> 
+              <br />
+              <span>{recommendation}</span>
             </div>
           </div>
 
@@ -457,12 +563,12 @@ const FDBasedRetirementCalculator: React.FC = () => {
             </p>
             {chartType === "line" && (
               <p>
-                <strong>Line Chart:</strong> Displays the remaining corpus balance year by year.
+                <strong>Line Chart:</strong> Displays the remaining corpus balance by age.
               </p>
             )}
             {chartType === "bar" && (
               <p>
-                <strong>Bar Chart:</strong> Illustrates annual withdrawals and net interest effects.
+                <strong>Bar Chart:</strong> Illustrates annual withdrawals and net interest effects by age.
               </p>
             )}
           </div>
@@ -479,7 +585,7 @@ const FDBasedRetirementCalculator: React.FC = () => {
               {chartType === "line" && lineChartData ? (
                 <LineChart data={lineChartData} margin={{ left: 50, right: 30, top: 20, bottom: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="year" label={{ value: "Year", position: "insideBottom", offset: -5 }} />
+                  <XAxis dataKey="age" label={{ value: "Age", position: "insideBottom", offset: -5 }} />
                   <YAxis domain={["auto", "auto"]} tickFormatter={(val) => "₹" + val.toLocaleString("en-IN")} />
                   <RechartsTooltip formatter={(value: number) => "₹" + Math.round(value).toLocaleString("en-IN")} />
                   <Legend />
@@ -488,7 +594,7 @@ const FDBasedRetirementCalculator: React.FC = () => {
               ) : chartType === "bar" && barChartData ? (
                 <BarChart data={barChartData} margin={{ left: 50, right: 30, top: 20, bottom: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="year" />
+                  <XAxis dataKey="age" label={{ value: "Age", position: "insideBottom", offset: -5 }} />
                   <YAxis tickFormatter={(val) => "₹" + val.toLocaleString("en-IN")} />
                   <RechartsTooltip formatter={(value: number) => "₹" + Math.round(value).toLocaleString("en-IN")} />
                   <Legend />
@@ -500,28 +606,63 @@ const FDBasedRetirementCalculator: React.FC = () => {
               )}
             </ResponsiveContainer>
           </div>
+
+          {/* Table below the chart */}
+          <div className="amortization-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>Year</th>
+                  <th>Age</th>
+                  <th>Starting Corpus (₹)</th>
+                  <th>Interest Earned (₹)</th>
+                  <th>Tax Paid (₹)</th>
+                  <th>Net Interest (₹)</th>
+                  <th>Withdrawal (₹)</th>
+                  <th>Ending Corpus (₹)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {results.yearWise.map((data) => (
+                  <tr key={data.year}>
+                    <td>{data.year}</td>
+                    <td>{retirementAgeNum + data.year - 1}</td>
+                    <td>{data.startingCorpus.toLocaleString("en-IN")}</td>
+                    <td>{data.interestEarned.toLocaleString("en-IN")}</td>
+                    <td>{data.taxPaid.toLocaleString("en-IN")}</td>
+                    <td>{data.netInterest.toLocaleString("en-IN")}</td>
+                    <td>{data.withdrawal.toLocaleString("en-IN")}</td>
+                    <td>{data.endingCorpus.toLocaleString("en-IN")}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
-    {results && (
-      <div className="disclaimer">
-        <h4>Important Considerations</h4>
-        <ul>
-          <li>
-            This calculator estimates how long your FD corpus can support your retirement withdrawals.
-          </li>
-          <li>
-            Calculations account for interest earned (net of tax, if provided) and withdrawals adjusted for inflation and lifestyle changes.
-          </li>
-          <li>
-            Results are based on the input parameters and are for reference only.
-          </li>
-          <li>
-            Please consult a financial advisor before making any major retirement decisions.
-          </li>
-        </ul>
-      </div>
-    )}
+      {results && (
+        <div className="disclaimer">
+          <h4>Important Considerations</h4>
+          <ul>
+            <li>
+              This calculator estimates how long your FD corpus can support your retirement withdrawals.
+            </li>
+            <li>
+              Calculations account for interest earned (net of tax, if provided) and withdrawals adjusted for inflation and lifestyle changes.
+            </li>
+            <li>
+              It assumes you already have your FD corpus at retirement (i.e. it does not accumulate your corpus from your current age to retirement).
+            </li>
+            <li>
+              The projection is capped at your life expectancy; the graph and recommendations only show years up to (life expectancy – retirement age).
+            </li>
+            <li>
+              Please consult a financial advisor before making any major retirement decisions.
+            </li>
+          </ul>
+        </div>
+      )}
 
       <style jsx>{`
         .container {
@@ -553,9 +694,6 @@ const FDBasedRetirementCalculator: React.FC = () => {
           text-align: center;
           font-size: 1.2rem;
           margin-bottom: 1rem;
-        }
-        .explanation {
-          display: none;
         }
         .form-container {
           background: #fff;

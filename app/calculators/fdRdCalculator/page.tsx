@@ -241,7 +241,7 @@ const FDRDCalculator: React.FC = () => {
           newErrors[field as keyof CalculatorInputs] = "Please enter a valid number";
         }
       });
-      // Optional: stepUp is allowed to be empty (or zero)
+      // stepUp is optional, can be empty or zero
     }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -255,6 +255,7 @@ const FDRDCalculator: React.FC = () => {
       // -----------------
       // FD Calculation:
       // FD Maturity Value = Principal × (1 + (r/400))^(4 × fdTenure)
+      // (Quarterly compounding)
       // -----------------
       const fdPrincipal = parseFloat(inputs.principal);
       const fdTenure = parseFloat(inputs.fdTenure);
@@ -275,35 +276,82 @@ const FDRDCalculator: React.FC = () => {
       });
     } else {
       // -----------------
-      // RD Calculation:
-      // For RD: use quarterly compounding on each deposit.
+      // RD Calculation (Monthly Compounding):
+      // We deposit every month for 'rdTenure' years → totalMonths = rdTenure * 12
+      // monthlyRate = (rdInterestRate / 100) / 12
+      //
+      // Standard RD formula for monthly deposits at end of each month:
+      //   For each deposit made in month m, it compounds for (totalMonths - m) months.
+      //   Final RD = Σ [ deposit_m * (1 + monthlyRate)^(totalMonths - m) ]
+      //   plus any step-up increments each year
       // -----------------
       const rdMonthly = parseFloat(inputs.monthlyDeposit);
       const rdTenure = parseFloat(inputs.rdTenure);
       const rdRate = parseFloat(inputs.rdInterestRate);
-      const r_rd = rdRate / 400; // quarterly rate
+      const monthlyRate = rdRate / 100 / 12;
+      const totalMonths = rdTenure * 12;
       const stepUpPercent = inputs.stepUp ? parseFloat(inputs.stepUp) : 0;
+
       let totalRdInvested = 0;
       let totalRdFV = 0;
-      const rdYearWise: YearlyData[] = [];
       let currentDeposit = rdMonthly;
-      for (let year = 1; year <= rdTenure; year++) {
-        const annualContribution = currentDeposit * 12;
-        totalRdInvested += annualContribution;
-        const compoundingYears = rdTenure - year;
-        const fvForYear =
-          annualContribution *
-          ((Math.pow(1 + r_rd, 4 * compoundingYears) - 1) / r_rd) *
-          (1 + r_rd);
-        totalRdFV += fvForYear;
-        rdYearWise.push({
-          year,
-          totalInvested: parseFloat(totalRdInvested.toFixed(2)),
-          futureValue: parseFloat(totalRdFV.toFixed(2)),
-          wealthGained: parseFloat((totalRdFV - totalRdInvested).toFixed(2)),
-        });
-        currentDeposit = currentDeposit * (1 + stepUpPercent / 100);
+
+      // We'll also build a "yearWise" breakdown to mimic your table
+      const rdYearWise: YearlyData[] = [];
+
+      // We'll track the lumpsum approach for the final result
+      let monthCounter = 1;
+      let nextYearEnd = 12; // when we cross each year boundary
+
+      for (let m = 1; m <= totalMonths; m++) {
+        // deposit at end of month m
+        totalRdFV += currentDeposit * Math.pow(1 + monthlyRate, (totalMonths - m));
+        totalRdInvested += currentDeposit;
+
+        // Step-up the deposit at the end of each 12-month block (start of next year)
+        if (m === nextYearEnd && m < totalMonths) {
+          nextYearEnd += 12;
+          currentDeposit *= (1 + stepUpPercent / 100);
+        }
       }
+
+      // Now build a year-wise table (if you want to display partial growth each year)
+      // For year 1..rdTenure, we re-run the lumpsum sum for that year
+      let depositForYearWise = rdMonthly;
+      let cumulativeInvested = 0;
+      let lumpsumSum = 0;
+      let yearBoundary = 12;
+      nextYearEnd = 12;
+
+      for (let y = 1; y <= rdTenure; y++) {
+        // Sum from month=1 to month=(12*y)
+        lumpsumSum = 0;
+        depositForYearWise = rdMonthly;
+        cumulativeInvested = 0;
+        let boundary = y * 12; // the last month of that year
+
+        let depositForCalc = rdMonthly;
+        let yearNextStep = 12;
+
+        for (let m = 1; m <= boundary; m++) {
+          lumpsumSum += depositForCalc * Math.pow(1 + monthlyRate, (boundary - m));
+          cumulativeInvested += depositForCalc;
+
+          // step up after every 12 months
+          if (m === yearNextStep && m < boundary) {
+            yearNextStep += 12;
+            depositForCalc *= (1 + stepUpPercent / 100);
+          }
+        }
+
+        rdYearWise.push({
+          year: y,
+          totalInvested: parseFloat(cumulativeInvested.toFixed(2)),
+          futureValue: parseFloat(lumpsumSum.toFixed(2)),
+          wealthGained: parseFloat((lumpsumSum - cumulativeInvested).toFixed(2)),
+        });
+      }
+
       const rdInterest = totalRdFV - totalRdInvested;
       setRdResults({
         totalInvested: parseFloat(totalRdInvested.toFixed(2)),
@@ -318,10 +366,11 @@ const FDRDCalculator: React.FC = () => {
 
   // Get the right chart data based on active calculator
   const fdChartData = fdResults?.chartData || [];
-  const rdChartData = rdResults?.yearWise.map((data) => ({
-    year: data.year,
-    FutureValue: data.futureValue,
-  })) || [];
+  const rdChartData =
+    rdResults?.yearWise.map((data) => ({
+      year: data.year,
+      FutureValue: data.futureValue,
+    })) || [];
 
   return (
     <div className="container">
@@ -459,7 +508,7 @@ const FDRDCalculator: React.FC = () => {
             <label>
               <span className="input-label">
                 RD Annual Interest Rate (%)
-                <Tooltip text="Enter the annual RD interest rate (compounded quarterly)." />
+                <Tooltip text="Enter the annual RD interest rate (typically monthly compounding for standard RD calculators)." />
               </span>
               <input
                 type="number"
@@ -517,7 +566,7 @@ const FDRDCalculator: React.FC = () => {
           
           <h2 className="results-title">Growth Visualization</h2>
           <div className="chart-explanation">
-            <p>This growth chart shows how your initial investment of ₹{parseFloat(inputs.principal).toLocaleString("en-IN")} grows over time with a fixed interest rate of {inputs.fdInterestRate}% compounded quarterly. At maturity after {inputs.fdTenure} years, your investment reaches ₹{fdResults.maturityValue.toLocaleString("en-IN")}.</p>
+            <p>This growth chart shows how your initial investment of ₹{parseFloat(inputs.principal).toLocaleString("en-IN")} grows over time with a fixed interest rate of {inputs.fdInterestRate}% (compounded quarterly). At maturity after {inputs.fdTenure} years, your investment reaches ₹{fdResults.maturityValue.toLocaleString("en-IN")}.</p>
           </div>
           
           <div className="chart-container">
@@ -577,7 +626,13 @@ const FDRDCalculator: React.FC = () => {
           
           <h2 className="results-title">Growth Visualization</h2>
           <div className="chart-explanation">
-            <p>This chart shows how your regular monthly deposits of ₹{parseFloat(inputs.monthlyDeposit).toLocaleString("en-IN")} grow over time with compound interest at {inputs.rdInterestRate}%. {inputs.stepUp && `The deposits increase by ${inputs.stepUp}% annually, helping your investment grow faster.`} After {inputs.rdTenure} years, your investment reaches a total of ₹{rdResults.maturityValue.toLocaleString("en-IN")}.</p>
+            <p>
+              This chart shows how your regular monthly deposits grow over time with 
+              <strong> monthly compounding</strong> at {inputs.rdInterestRate}%. 
+              {inputs.stepUp && ` The deposits increase by ${inputs.stepUp}% each year, boosting overall returns.`} 
+              After {inputs.rdTenure} years, your investment reaches a total of ₹
+              {rdResults.maturityValue.toLocaleString("en-IN")}.
+            </p>
           </div>
           
           <div className="chart-container">
@@ -621,7 +676,7 @@ const FDRDCalculator: React.FC = () => {
             <h4>Important Considerations</h4>
             <ul>
               <li>
-                RD Maturity is calculated using quarterly compounding on each deposit and accounts for an optional step-up percentage.
+                RD maturity here is calculated using standard <strong>monthly compounding</strong> on each monthly deposit.
               </li>
               <li>
                 Interest earned on RDs is taxable based on your income tax slab rate.
