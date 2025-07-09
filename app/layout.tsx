@@ -8,6 +8,14 @@ export const metadata = {
     "Dashboard for 18 calculators - Calculate your financial goals, projections and more",
 };
 
+// Define contributors in a structured format
+const contributors = [
+  { name: "Varun R Poojari", prn: "1032211035" },
+  { name: "Shreny D Jain", prn: "1032211794" },
+  { name: "Sahil Panda", prn: "1032212344" },
+  { name: "Dhruv Jain", prn: "1032212358" },
+];
+
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
@@ -20,11 +28,19 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       </head>
       <body>
         <header className="header">
-          <h1>Website Dashboard 2.0</h1>
+          <h1>Final Year Capstone Project</h1>
+          <ul className="contributors">
+            {contributors.map(({ name, prn }) => (
+              <li key={prn}>
+                <span className="name">{name}</span>{" "}
+                <span className="prn">({prn})</span>
+              </li>
+            ))}
+          </ul>
         </header>
         <main>{children}</main>
         <footer className="footer">
-          <p>© 2025 Your Company. All rights reserved.</p>
+          <p>© Batch of 2025 Btech CSE-CSF. All rights reserved.</p>
           <Link href="https://wa.me/yourwhatsapplink" legacyBehavior>
             <a className="cta">Get in Touch</a>
           </Link>
