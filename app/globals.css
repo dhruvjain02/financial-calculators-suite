@@ -35,6 +35,12 @@ body {
   margin: 0;
 }
 
+/* Nostalgic note styling */
+.nostalgia {
+  margin-top: 0.75rem;
+  font-size: 1rem;
+}
+
 /* Footer styling */
 .footer {
   background-color: var(--black);

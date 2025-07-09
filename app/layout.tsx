@@ -10,8 +10,8 @@ export const metadata = {
 
 // Define contributors in a structured format
 const contributors = [
-  { name: "Varun R Poojari", prn: "1032211035" },
-  { name: "Shreny D Jain", prn: "1032211794" },
+  { name: "Varun R. Poojari", prn: "1032211035" },
+  { name: "Shreny D. Jain", prn: "1032211794" },
   { name: "Sahil Panda", prn: "1032212344" },
   { name: "Dhruv Jain", prn: "1032212358" },
 ];
@@ -37,10 +37,11 @@ export default function RootLayout({ children }: { children: ReactNode }) {
               </li>
             ))}
           </ul>
+          <p className="nostalgia">(With our non-helping, non-capstone group member Alfiya M. Sayyad (1032221430))</p>
         </header>
         <main>{children}</main>
         <footer className="footer">
-          <p>© Batch of 2025 Btech CSE-CSF. All rights reserved.</p>
+          <p>© Batch of 2025 — B.Tech CSE-CSF, MIT-WPU (Pune). All rights reserved.</p>
           <Link href="https://wa.me/yourwhatsapplink" legacyBehavior>
             <a className="cta">Get in Touch</a>
           </Link>
